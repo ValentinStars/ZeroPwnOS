@@ -1,0 +1,16 @@
+[Unit]
+Description=Aegis-Zero Pentest GUI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/aegis-zero
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/aegis-zero/main.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
