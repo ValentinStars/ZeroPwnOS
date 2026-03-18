@@ -19,7 +19,7 @@ class AegisZeroApp:
         self.state = AppState(wifi_interface=cfg.wifi_interface)
         self.state_machine = StateMachine(self.state)
         self.terminal = MiniTerminal()
-        self.terminal_focus = False
+        self.terminal_focus = True
 
         self.display = DisplayManager(cfg.display)
         self.input = InputManager(cfg.gpio, cfg.keyboard_device)
@@ -96,7 +96,7 @@ class AegisZeroApp:
         frame_time = 1 / max(1, self.cfg.display.fps)
         while not self.stop_event.is_set():
             self.menu.tick()
-            lines = self.terminal.render_lines(max_chars=26, max_lines=5)
+            lines = self.terminal.render_lines(max_chars=30, max_lines=3)
             self.display.render(
                 state=self.state,
                 menu_items=self.menu.current_items,
@@ -127,7 +127,7 @@ class AegisZeroApp:
                 await self._execute_action(action)
             return
         if kind in {"select", "action"}:
-            if self.terminal_focus and kind == "action":
+            if self.terminal_focus:
                 command = self.terminal.consume_command()
                 if command:
                     asyncio.create_task(self._run_terminal_command(command))
@@ -147,8 +147,9 @@ class AegisZeroApp:
                 self.terminal.backspace()
             return
         if kind == "text":
-            if self.terminal_focus:
-                self.terminal.append_input_text(event.value)
+            if not self.terminal_focus:
+                self.terminal_focus = True
+            self.terminal.append_input_text(event.value)
             return
 
     async def _execute_action(self, action: str) -> None:
@@ -165,7 +166,7 @@ class AegisZeroApp:
             return
 
         if action == "terminal.open":
-            self.terminal_focus = True
+            self.terminal_focus = not self.terminal_focus
             self.state.header_message = "TERMINAL"
             self.state.touch()
             return

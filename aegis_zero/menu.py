@@ -69,4 +69,4 @@ class MenuController:
         if abs(self.page_transition) < 0.03:
             self.page_transition = 0.0
             return
-        self.page_transition *= 0.72
+        self.page_transition *= 0.52

@@ -187,15 +187,22 @@ class InputManager:
             except OSError:
                 return None
 
+        fallback: InputDevice | None = None
         for path in list_devices():
             try:
                 dev = InputDevice(path)
                 caps = dev.capabilities()
-                if ecodes.EV_KEY in caps and "keyboard" in dev.name.lower():
+                key_caps = caps.get(ecodes.EV_KEY, [])
+                if not key_caps:
+                    continue
+                key_set = {k for k in key_caps if isinstance(k, int)}
+                if ecodes.KEY_ENTER in key_set and ecodes.KEY_A in key_set:
                     return dev
+                if fallback is None:
+                    fallback = dev
             except OSError:
                 continue
-        return None
+        return fallback
 
     def _map_key(self, keycode: str) -> None:
         nav_map = {
@@ -204,6 +211,7 @@ class InputManager:
             "KEY_LEFT": "nav_left",
             "KEY_RIGHT": "nav_right",
             "KEY_ENTER": "select",
+            "KEY_KPENTER": "select",
             "KEY_ESC": "back",
             "KEY_SPACE": "text",
             "KEY_BACKSPACE": "backspace",

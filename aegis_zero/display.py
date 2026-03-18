@@ -23,8 +23,9 @@ class DisplayManager:
         self.cfg = cfg
         self.device = None
         self.emulated = False
-        self._font = ImageFont.load_default()
-        self._font_mono = ImageFont.load_default()
+        self._font = self._load_font(8)
+        self._font_mono = self._load_font(8)
+        self._font_tiny = self._load_font(7)
 
     async def initialize(self) -> None:
         if i2c is None or ssd1306 is None:
@@ -66,10 +67,8 @@ class DisplayManager:
         draw = ImageDraw.Draw(image)
 
         self._draw_header(draw, state)
-        if terminal_focus:
-            self._draw_terminal(draw, terminal_lines)
-        else:
-            self._draw_menu(draw, menu_items, selected_index, menu_transition)
+        self._draw_menu(draw, menu_items, selected_index, menu_transition)
+        self._draw_terminal(draw, terminal_lines, terminal_focus)
         self._draw_rssi_sparkline(draw, state.rssi_history)
         self._flush(image)
 
@@ -79,24 +78,14 @@ class DisplayManager:
         draw.rectangle((0, 0, w - 1, hh - 1), outline=1, fill=0)
         draw.line((0, hh, w - 1, hh), fill=1)
 
-        status = (
-            f"CPU {state.metrics.cpu_load_pct:2.0f}% "
-            f"RAM {state.metrics.ram_used_pct:2.0f}% "
-            f"T {state.metrics.temperature_c:2.0f}C"
-        )
-        draw.text((1, 0), status[:27], font=self._font, fill=1)
+        status = f"C{state.metrics.cpu_load_pct:02.0f} R{state.metrics.ram_used_pct:02.0f} T{state.metrics.temperature_c:02.0f}"
+        draw.text((1, 0), status[:20], font=self._font_tiny, fill=1)
 
         battery = "--"
         if state.metrics.battery_pct is not None:
             battery = f"{state.metrics.battery_pct:2.0f}%"
-        flags = (
-            f"M:{'1' if state.flags.monitor_mode else '0'} "
-            f"V:{'1' if state.flags.vpn_enabled else '0'} "
-            f"S:{'1' if state.flags.active_scan else '0'} "
-            f"H:{state.flags.handshake_count} "
-            f"B:{battery}"
-        )
-        draw.text((1, 8), flags[:27], font=self._font, fill=1)
+        flags = f"M{int(state.flags.monitor_mode)} V{int(state.flags.vpn_enabled)} S{int(state.flags.active_scan)} H{state.flags.handshake_count} B{battery}"
+        draw.text((1, 7), flags[:20], font=self._font_tiny, fill=1)
 
     def _draw_menu(
         self,
@@ -109,7 +98,7 @@ class DisplayManager:
             draw.text((2, self.cfg.header_height + 4), "No menu items", font=self._font, fill=1)
             return
 
-        row_h = 11
+        row_h = 8
         max_rows = 3
         y_start = self.cfg.header_height + 2
 
@@ -124,17 +113,22 @@ class DisplayManager:
             y = y_start + rel * row_h
             selected = absolute_index == selected_index
             if selected:
-                draw.rectangle((0, y, self.cfg.width - 1, y + row_h - 1), outline=1, fill=1)
-                draw.text((2 + x_offset, y + 1), item.title[:21], font=self._font_mono, fill=0)
+                draw.rectangle((0, y, self.cfg.width - 1, y + row_h), outline=1, fill=1)
+                draw.text((2 + x_offset, y), item.title[:21], font=self._font_tiny, fill=0)
             else:
-                draw.text((2 + x_offset, y + 1), item.title[:21], font=self._font_mono, fill=1)
+                draw.text((2 + x_offset, y), item.title[:21], font=self._font_tiny, fill=1)
 
-    def _draw_terminal(self, draw: ImageDraw.ImageDraw, lines: list[str]) -> None:
-        y = self.cfg.header_height + 2
+    def _draw_terminal(self, draw: ImageDraw.ImageDraw, lines: list[str], terminal_focus: bool) -> None:
+        area_top = self.cfg.header_height + 2 + 3 * 8 + 1
+        area_bottom = self.cfg.height - 9
+        draw.line((0, area_top - 1, self.cfg.width - 1, area_top - 1), fill=1)
+        if terminal_focus:
+            draw.rectangle((0, area_top, self.cfg.width - 1, area_bottom), outline=1, fill=0)
+        y = area_top + 1
         for line in lines:
-            draw.text((1, y), line[:26], font=self._font_mono, fill=1)
-            y += 9
-            if y >= self.cfg.height - 8:
+            draw.text((1, y), line[:30], font=self._font_tiny, fill=1)
+            y += 7
+            if y >= area_bottom - 5:
                 break
 
     def _draw_rssi_sparkline(self, draw: ImageDraw.ImageDraw, rssi_points: Iterable[int]) -> None:
@@ -165,3 +159,15 @@ class DisplayManager:
     def _flush(self, image: Image.Image) -> None:
         if self.device is not None:
             self.device.display(image)
+
+    @staticmethod
+    def _load_font(size: int) -> ImageFont.ImageFont:
+        for path in (
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ):
+            try:
+                return ImageFont.truetype(path, size)
+            except OSError:
+                continue
+        return ImageFont.load_default()
